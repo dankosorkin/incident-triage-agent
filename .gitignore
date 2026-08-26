@@ -12,6 +12,7 @@ __pycache__/
 # Generated data artifacts (recreated by scripts, not source)
 data/*.db
 data/chroma/
+data/traces.jsonl
 
 # IDE
 .idea/
