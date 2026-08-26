@@ -14,6 +14,7 @@ dependencies = [
     "pydantic-settings",
     "openai",
     "anthropic",
+    "chromadb",
 ]
 
 [tool.setuptools.packages.find]
