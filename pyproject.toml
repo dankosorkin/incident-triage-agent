@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "triage"
+version = "0.1.0"
+description = "Incident triage assistant routing between SQL and RAG via tool calling"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-dotenv",
+    "pydantic-settings",
+    "openai",
+    "anthropic",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
