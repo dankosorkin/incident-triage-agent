@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
+# Secrets / local config
+.env
+
+# Generated data artifacts (recreated by scripts, not source)
+data/*.db
+data/chroma/
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
