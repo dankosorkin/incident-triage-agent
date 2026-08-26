@@ -31,7 +31,7 @@ LLM tool calling, which source (or both) a question needs.
 - [x] Typed config loaded from `.env`
 - [x] SQL: incidents schema + synthetic dataset (deterministic, fixed seed)
 - [x] SQL: read-only query tool with tracing
-- [ ] RAG: postmortem/runbook corpus
+- [x] RAG: postmortem/runbook corpus
 - [ ] RAG: chunking, embeddings, Chroma ingestion
 - [ ] RAG: retrieval tool
 - [ ] Agent: tool-calling routing loop

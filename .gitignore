@@ -13,6 +13,7 @@ __pycache__/
 data/*.db
 data/chroma/
 data/traces.jsonl
+app/rag/docs/incident_*.md
 
 # IDE
 .idea/
