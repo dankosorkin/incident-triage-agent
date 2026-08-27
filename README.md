@@ -35,7 +35,7 @@ LLM tool calling, which source (or both) a question needs.
 - [x] RAG: chunking, embeddings, Chroma ingestion
 - [x] RAG: retrieval tool
 - [x] Agent: tool-calling routing loop
-- [ ] FastAPI endpoint
+- [x] FastAPI endpoint
 - [ ] Eval harness + metrics
 
 ## Tech stack
@@ -51,7 +51,11 @@ pip install -e .
 
 cp .env.example .env   # fill in OPENAI_API_KEY / ANTHROPIC_API_KEY
 
-python -m app.sql.seed_data   # generates data/incidents.db
+python -m app.sql.seed_data           # generates data/incidents.db
+python -m app.rag.generate_postmortems  # generates app/rag/docs/incident_*.md
+python -m app.rag.ingest              # embeds docs into data/chroma
+
+uvicorn app.api.main:app --reload     # serves /chat and /health
 ```
 
 ## Project layout
