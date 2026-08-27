@@ -30,7 +30,7 @@ def health() -> dict:
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
     try:
-        answer = run_agent(request.question, provider=request.provider)
+        result = run_agent(request.question, provider=request.provider)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return ChatResponse(answer=answer)
+    return ChatResponse(answer=result.answer)

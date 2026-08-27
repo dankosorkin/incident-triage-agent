@@ -8,6 +8,7 @@ import time
 
 from app.agent.providers import anthropic_provider, openai_provider
 from app.agent.tool_specs import TOOLS
+from app.agent.turn import AgentResult, ToolExecution
 from app.rag.rag_tool import search as rag_search
 from app.sql.sql_tool import run_sql_query
 from app.tracing import tracer
@@ -29,12 +30,13 @@ MODEL_PRICING = {
 PROVIDERS = {"openai": openai_provider, "anthropic": anthropic_provider}
 
 
-def run_agent(question: str, provider: str = "anthropic") -> str:
+def run_agent(question: str, provider: str = "anthropic") -> AgentResult:
     if provider not in PROVIDERS:
         raise ValueError(f"Unknown provider: {provider}")
     adapter = PROVIDERS[provider]
     client = adapter.build_client()
     messages = adapter.build_initial_messages(question)
+    tool_executions: list[ToolExecution] = []
 
     for _ in range(MAX_ITERATIONS):
         start = time.perf_counter()
@@ -60,13 +62,13 @@ def run_agent(question: str, provider: str = "anthropic") -> str:
         messages.append(turn.raw_assistant_message)
 
         if not turn.tool_calls:
-            return turn.text or ""
+            return AgentResult(answer=turn.text or "", tool_executions=tool_executions)
 
         results = []
         for tc in turn.tool_calls:
             try:
                 result = TOOL_DISPATCH[tc.name](tc.arguments)
-                results.append(json.dumps(result))
+                result_str = json.dumps(result)
             except Exception as exc:
                 # Tool failures are handed back to the model as the tool
                 # result, not raised -- the model can see the error and
@@ -74,8 +76,13 @@ def run_agent(question: str, provider: str = "anthropic") -> str:
                 # back to the other tool, or explain the failure to the
                 # user. Broad on purpose: any failure at this boundary
                 # (ours or the tool's) should reach the model this way.
-                results.append(f"Error: {exc}")
+                result_str = f"Error: {exc}"
+            results.append(result_str)
+            tool_executions.append(ToolExecution(name=tc.name, arguments=tc.arguments, result=result_str))
 
         messages.extend(adapter.build_tool_result_messages(turn.tool_calls, results))
 
-    return "Agent could not resolve the question within the iteration limit."
+    return AgentResult(
+        answer="Agent could not resolve the question within the iteration limit.",
+        tool_executions=tool_executions,
+    )
