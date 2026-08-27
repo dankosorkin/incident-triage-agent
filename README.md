@@ -33,7 +33,7 @@ LLM tool calling, which source (or both) a question needs.
 - [x] SQL: read-only query tool with tracing
 - [x] RAG: postmortem/runbook corpus
 - [x] RAG: chunking, embeddings, Chroma ingestion
-- [ ] RAG: retrieval tool
+- [x] RAG: retrieval tool
 - [ ] Agent: tool-calling routing loop
 - [ ] FastAPI endpoint
 - [ ] Eval harness + metrics
