@@ -1,0 +1,11 @@
+.venv/
+.git/
+__pycache__/
+*.pyc
+*.egg-info/
+.env
+data/
+eval/
+app/rag/docs/incident_*.md
+.idea/
+.DS_Store
