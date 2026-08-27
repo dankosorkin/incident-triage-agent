@@ -120,3 +120,15 @@ A few decisions that aren't obvious from the code alone:
   query, and quality varies by topic. Not fixed -- noted as a known
   limitation, since "translate the query to English first" is a real
   design choice for a production version, not a one-line patch here.
+- **`sql_tool`'s description explicitly says `resolved` and `closed`
+  are both terminal statuses.** Found via eval: the agent inconsistently
+  excluded `closed` incidents on aggregate questions ("how many X",
+  "who resolved the most"), undercounting against the full data. Fixed
+  at the prompt level (one clarifying paragraph, no schema/code
+  change) -- verified by rerunning the full eval afterward: the two
+  affected cases now pass (`execution_correct`/`answer_correct` went
+  13/13 from 11/13 effective), and the other 18 cases were unaffected.
+  This is the eval-driven loop the project is built around: find a
+  concrete failure, form a hypothesis about the cause, apply the
+  smallest fix that targets it, re-run the whole eval to confirm the
+  fix and check for regressions.

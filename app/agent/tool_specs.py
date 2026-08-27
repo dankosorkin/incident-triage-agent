@@ -41,6 +41,12 @@ SQL_TOOL = ToolSpec(
         "questions about structured incident data: counts, filtering by severity, "
         "service, status, or date, who resolved an incident, and how long it took. "
         "Use this for questions with a factual, countable, or filterable answer.\n\n"
+        "Note on status: 'resolved' and 'closed' are both terminal (completed) "
+        "states -- an incident that is 'closed' is just as done as one that is "
+        "'resolved'. For aggregate questions like 'how many incidents' or 'who "
+        "resolved the most', include both statuses unless the question "
+        "specifically asks about incidents that are still open ('open' or "
+        "'investigating').\n\n"
         "Table schema:\n"
         f"{SCHEMA_SQL.read_text()}"
     ),
