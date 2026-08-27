@@ -34,7 +34,7 @@ LLM tool calling, which source (or both) a question needs.
 - [x] RAG: postmortem/runbook corpus
 - [x] RAG: chunking, embeddings, Chroma ingestion
 - [x] RAG: retrieval tool
-- [ ] Agent: tool-calling routing loop
+- [x] Agent: tool-calling routing loop
 - [ ] FastAPI endpoint
 - [ ] Eval harness + metrics
 
