@@ -64,9 +64,22 @@ final answer, and your `expected_answer`/`notes` passed through unchanged.
   `python -m eval.grade_sql_llm` (LLM judge on everything). Otherwise:
   `python -m eval.grade_sql_hybrid`
 
-- **RAG groundedness** — *not* computed here. Whether a RAG answer is
-  actually grounded in the retrieved chunks is a judgment call without a
-  single "fact" to check against, unlike the SQL case — write that grading
-  yourself, reading `eval/results.jsonl` (each `rag_*`/`both_*` row already
-  has the retrieved chunks under `tool_executions`, so no need to re-run the
-  agent to grade it).
+- **RAG groundedness** — not automated, by design: whether a RAG answer is
+  grounded in the retrieved chunks is a judgment call without a single "fact"
+  to check against, unlike the SQL case. `grade_rag_manual.py` is a terminal
+  tool for doing that judgment by hand, not a grader:
+
+  ```bash
+  python -m eval.grade_rag_manual
+  ```
+
+  For each `rag_*`/`both_*` case it prints the question, every retrieved
+  chunk (source, section, distance), and the agent's final answer, then asks
+  for three 0-2 scores -- context relevance, groundedness, answer relevance
+  -- plus a `hallucinated_specific_fact` yes/no flag (a made-up name, ID, or
+  number is a distinct, worse failure than "somewhat ungrounded"). Resumable:
+  already-graded ids are skipped, and each grade is written to
+  `eval/rag_grades.jsonl` immediately, so interrupting loses at most the case
+  in progress. Unlike the other generated eval files, `rag_grades.jsonl` is
+  **not** gitignored -- it encodes real judgment work, not something a script
+  can regenerate.

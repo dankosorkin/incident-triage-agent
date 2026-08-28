@@ -22,6 +22,7 @@ def run_sql_query(query: str) -> list[dict]:
     start = time.perf_counter()
     error = None
     rows: list[dict] = []
+    conn = None
 
     try:
         if not query.strip().upper().startswith("SELECT"):
@@ -30,7 +31,6 @@ def run_sql_query(query: str) -> list[dict]:
         conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
         rows = [dict(row) for row in conn.execute(query).fetchall()]
-        conn.close()
         return rows
     except SQLToolError as exc:
         error = str(exc)
@@ -39,6 +39,12 @@ def run_sql_query(query: str) -> list[dict]:
         error = str(exc)
         raise SQLToolError(f"SQL query failed: {error}") from exc
     finally:
+        # conn is only ever unset if the SELECT-only check rejected the
+        # query before a connection was opened -- every other path
+        # (success or sqlite3.Error) must still close it, including
+        # when conn.execute() itself is what raised.
+        if conn is not None:
+            conn.close()
         latency_ms = (time.perf_counter() - start) * 1000
         log_event(
             "tool_call",
