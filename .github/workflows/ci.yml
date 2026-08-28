@@ -16,7 +16,7 @@ jobs:
       - name: Install dependencies (locked versions)
         run: |
           python -m pip install -r requirements-lock.txt
-          python -m pip install --no-deps -e ".[dev]"
+          python -m pip install -e ".[dev]"
       - name: Run tests
         run: python -m pytest --cov=app --cov-report=term-missing
 
