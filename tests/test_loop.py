@@ -151,6 +151,24 @@ def test_run_agent_traces_llm_call(fake_provider, monkeypatch):
     assert event_type == "llm_call"
     assert fields["provider"] == "openai"
     assert fields["model"] == "fake-model"
+    assert fields["error"] is None
+
+
+def test_run_agent_traces_and_reraises_failed_llm_call(fake_provider, monkeypatch):
+    logged = []
+    monkeypatch.setattr(loop.tracer, "log_event", lambda event_type, **fields: logged.append((event_type, fields)))
+    fake_provider.run_turn.side_effect = RuntimeError("provider is down")
+
+    with pytest.raises(RuntimeError, match="provider is down"):
+        loop.run_agent("question", provider="openai")
+
+    # Previously a failed run_turn() left no trace at all -- log_event
+    # only ran after a successful return.
+    assert len(logged) == 1
+    event_type, fields = logged[0]
+    assert event_type == "llm_call"
+    assert fields["error"] == "provider is down"
+    assert fields["input_tokens"] == 0
 
 
 def test_run_agent_request_id_is_consistent_across_llm_and_tool_calls(fake_provider, monkeypatch):

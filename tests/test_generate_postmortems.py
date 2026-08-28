@@ -1,3 +1,4 @@
+import random
 from datetime import datetime
 
 from app.rag.generate_postmortems import NARRATIVES, format_duration, render_postmortem
@@ -53,3 +54,28 @@ def test_render_postmortem_narrative_from_known_issue_type():
     narrative = NARRATIVES["OOM crash"]
     assert any(root_cause in text for root_cause in narrative["root_cause"])
     assert any(resolution in text for resolution in narrative["resolution"])
+
+
+def test_render_postmortem_root_cause_and_resolution_are_a_matching_pair():
+    # Regression test: root_cause/resolution/lessons used to be drawn
+    # independently, which could pair a cause with a resolution that
+    # doesn't actually address it. They must always share the same
+    # scenario index.
+    incident = {
+        "id": 1,
+        "title": "checkout-service: high latency",
+        "service": "checkout-service",
+        "severity": "P2",
+        "status": "resolved",
+        "created_at": "2025-01-01T00:00:00",
+        "resolved_at": "2025-01-01T01:00:00",
+        "resolved_by": "Jordan Lee",
+    }
+    narrative = NARRATIVES["high latency"]
+
+    random.seed(0)
+    for _ in range(50):
+        text = render_postmortem(incident)
+        cause_index = next(i for i, rc in enumerate(narrative["root_cause"]) if rc in text)
+        resolution_index = next(i for i, res in enumerate(narrative["resolution"]) if res in text)
+        assert cause_index == resolution_index

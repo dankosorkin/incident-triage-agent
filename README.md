@@ -45,9 +45,14 @@ LLM tool calling, which source (or both) a question needs.
 - [x] RAG groundedness (manual grading tool: `eval/grade_rag_manual.py`; grading itself not started)
 - [x] Docker (Dockerfile + docker-compose, verified end-to-end)
 - [x] Locked dependency versions (`requirements-lock.txt`, used by Docker build)
-- [x] Unit tests (99 tests, 91% coverage on `app/`; mocked OpenAI/Anthropic/Chroma, no real API calls)
+- [x] Unit tests (129 tests, 93% coverage on `app/`; mocked OpenAI/Anthropic/Chroma, no real API calls)
+- [x] CI (`.github/workflows/ci.yml`): tests + `pip-audit` on every push/PR
 - [x] Hardening: daily budget cap, explicit LLM timeouts/retries, non-root
       Docker user, request-id tracing, locked concurrent trace writes
+- [x] `/chat` auth (optional API key) + per-IP rate limiting
+- [x] `/ready` readiness probe (checks DB, Chroma, provider keys -- `/health` is liveness only)
+- [x] Request validation: bounded question length, `provider` as an enum
+- [x] Versioned/atomic Chroma ingestion (hash-based manifest, not directory existence)
 
 ## Tech stack
 
@@ -68,7 +73,7 @@ python -m app.sql.seed_data           # generates data/incidents.db
 python -m app.rag.generate_postmortems  # generates app/rag/docs/incident_*.md
 python -m app.rag.ingest              # embeds docs into data/chroma
 
-uvicorn app.api.main:app --reload     # serves /chat and /health
+uvicorn app.api.main:app --reload     # serves /chat, /health, /ready
 ```
 
 ### Or with Docker
@@ -102,7 +107,10 @@ I/O, but against `tmp_path` fixtures, never the actual `data/`.
 
 ```
 app/
-├── api/                 # FastAPI app (main.py: /chat, /health)
+├── api/                 # FastAPI app
+│   ├── main.py           # /chat, /health (liveness), /ready (readiness)
+│   ├── rate_limiter.py   # in-memory per-IP sliding window
+│   └── readiness.py      # DB / Chroma / provider-key checks for /ready
 ├── agent/               # the tool-calling loop
 │   ├── loop.py          # run_agent() -- the turn-taking orchestration
 │   ├── providers/       # openai_provider.py / anthropic_provider.py
@@ -218,9 +226,51 @@ A few decisions that aren't obvious from the code alone:
   POSIX (and necessary for larger payloads or networked filesystems), but
   the test is a concurrency smoke test, not a proven regression guard for
   this specific race.
-- **`/chat` has no authentication or rate limiting.** Anyone who can reach
-  the port can spend the configured OpenAI/Anthropic budget. Not fixed --
-  the daily circuit breaker above bounds the damage but doesn't replace
-  real auth, and that's a bigger, separate feature (API keys or JWT +
-  per-client rate limits), not a one-line fix. Biggest remaining gap in
-  the project as it stands.
+- **`/chat` auth and rate limiting, found missing by an external
+  production-readiness review.** `settings.service_api_key`, checked via
+  an `X-API-Key` header dependency; unset by default (open, fine for
+  local dev) so setting up auth isn't a precondition for running the
+  project at all. Paired with a 20-req/min-per-IP in-memory limiter
+  (`app/api/rate_limiter.py`) -- single-process only, matches the rest of
+  this project's single-node architecture, would need a shared store
+  behind multiple workers or replicas.
+- **`/health` vs `/ready`, same review.** `/health` always returns `ok` --
+  correct for a liveness probe (is the process up), wrong as the *only*
+  check, since it stayed green with a missing DB, an empty Chroma
+  collection, or no provider keys configured. `/ready`
+  (`app/api/readiness.py`) actually checks those three and returns `503`
+  if any fail.
+- **Request validation, same review.** `question` now has a length bound
+  (1-2000 chars) and `provider` is a `Literal["openai", "anthropic"]`
+  instead of a free string -- invalid values are rejected by FastAPI
+  before `run_agent()` is ever called, not after.
+- **Failed LLM calls are now traced too.** `tracer.log_event()` for
+  `llm_call` used to run only after `adapter.run_turn()` returned
+  successfully -- a call that failed outright (SDK retries exhausted,
+  auth error) left zero trace of the attempt. Now wrapped so the failure
+  is logged (with the error and zero cost/tokens) before it propagates.
+- **Postmortem root cause and resolution are drawn as a matching pair,
+  not independently.** Found by the same review: `root_cause`,
+  `resolution`, and `lessons` for a given issue type used to each get
+  their own `random.choice()`, which could pair a described cause with a
+  resolution that doesn't actually address it (e.g. "missing index"
+  paired with "added a circuit breaker for a slow dependency"). Now one
+  shared random index picks a coherent scenario across all three.
+- **Chroma ingestion is now versioned by a content hash, not "does
+  `data/chroma/` exist."** The old check meant a crash right after Chroma
+  created that directory (before `collection.add()` finished) looked
+  identical to a completed ingestion and would be silently skipped on
+  every future start; a corpus edit with the old directory still present
+  was ignored the same way. `app/rag/ingest.py` now writes a manifest
+  (`corpus_hash`, `chunk_count`, `embedding_model`, timestamp) after a
+  successful ingest, and `docker-entrypoint.sh` re-ingests whenever that
+  hash doesn't match the current docs on disk.
+- **`chromadb==1.5.9` has four open CVEs** (`pip-audit -r
+  requirements-lock.txt`), no patched release available as of this
+  writing. Their published exploit paths target Chroma's network
+  API/auth providers; this project only ever uses an in-process
+  `PersistentClient` and never runs `chromadb.HttpClient` or exposes a
+  Chroma server, so the advisories don't appear reachable here -- stated
+  as risk acceptance based on that reasoning, not proof, since it's an
+  applicability inference rather than a verified non-exploitability
+  claim. Revisit when a patched version ships.

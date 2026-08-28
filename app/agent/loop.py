@@ -60,7 +60,26 @@ def run_agent(question: str, provider: str = "anthropic") -> AgentResult:
             )
 
         start = time.perf_counter()
-        turn = adapter.run_turn(client, messages, TOOLS)
+        try:
+            turn = adapter.run_turn(client, messages, TOOLS)
+        except Exception as exc:
+            # Trace the failure before it propagates -- previously a
+            # failed call (SDK retries exhausted, auth error, etc.) left
+            # no trace at all, since log_event only ran after a
+            # successful run_turn() returned.
+            tracer.log_event(
+                "llm_call",
+                request_id=request_id,
+                provider=provider,
+                model=adapter.MODEL,
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+                latency_ms=round((time.perf_counter() - start) * 1000, 2),
+                tool_calls=[],
+                error=str(exc),
+            )
+            raise
         latency_ms = (time.perf_counter() - start) * 1000
 
         pricing = MODEL_PRICING[adapter.MODEL]
@@ -78,6 +97,7 @@ def run_agent(question: str, provider: str = "anthropic") -> AgentResult:
             cost_usd=round(cost_usd, 6),
             latency_ms=round(latency_ms, 2),
             tool_calls=[tc.name for tc in turn.tool_calls],
+            error=None,
         )
 
         messages.append(turn.raw_assistant_message)

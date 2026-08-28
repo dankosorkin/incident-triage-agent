@@ -11,7 +11,7 @@ if [ -z "$(ls app/rag/docs/incident_*.md 2>/dev/null)" ]; then
     python -m app.rag.generate_postmortems
 fi
 
-if [ ! -d data/chroma ]; then
+if python -c "from app.rag.ingest import needs_ingestion; import sys; sys.exit(0 if needs_ingestion() else 1)"; then
     echo "Embedding RAG corpus into Chroma..."
     python -m app.rag.ingest
 fi

@@ -208,9 +208,15 @@ def render_postmortem(incident: dict) -> str:
     resolved_at = datetime.fromisoformat(incident["resolved_at"])
     duration = format_duration(created_at, resolved_at)
 
-    root_cause = random.choice(narrative["root_cause"])
-    resolution = random.choice(narrative["resolution"])
-    lesson = random.choice(narrative["lessons"])
+    # One shared index, not three independent random.choice() calls --
+    # root_cause[i]/resolution[i]/lessons[i] are written as a matching
+    # scenario (a fix that addresses that specific cause). Drawing them
+    # independently could pair a cause with a resolution that doesn't
+    # actually address it.
+    scenario = random.randrange(len(narrative["root_cause"]))
+    root_cause = narrative["root_cause"][scenario]
+    resolution = narrative["resolution"][scenario]
+    lesson = narrative["lessons"][scenario]
 
     return f"""# Postmortem: {incident['title']}
 
