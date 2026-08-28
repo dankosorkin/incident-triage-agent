@@ -14,10 +14,15 @@ from app.config import settings
 
 MODEL = "gpt-4o-mini"
 MAX_TOKENS = 1024
+# SDK default read timeout is 600s -- fine for a batch job, way too long
+# for a request held open in a threadpool worker. 2 retries is also the
+# SDK default; stated explicitly here rather than relying on it silently.
+REQUEST_TIMEOUT_SECONDS = 30.0
+MAX_RETRIES = 2
 
 
 def build_client() -> OpenAI:
-    return OpenAI(api_key=settings.openai_api_key)
+    return OpenAI(api_key=settings.openai_api_key, timeout=REQUEST_TIMEOUT_SECONDS, max_retries=MAX_RETRIES)
 
 
 def build_initial_messages(question: str) -> list[dict]:

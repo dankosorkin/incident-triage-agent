@@ -5,19 +5,31 @@ and repeats until the model returns a final text answer.
 
 import json
 import time
+import uuid
 
 from app.agent.providers import anthropic_provider, openai_provider
 from app.agent.tool_specs import TOOLS
 from app.agent.turn import AgentResult, ToolExecution
+from app.config import settings
 from app.rag.rag_tool import search as rag_search
 from app.sql.sql_tool import run_sql_query
 from app.tracing import tracer
 
 MAX_ITERATIONS = 5
 
+
+class BudgetExceededError(Exception):
+    pass
+
+# Each dispatcher takes (arguments, request_id) so every tool_call trace
+# line can be tied back to the request that triggered it -- otherwise
+# concurrent requests interleave in traces.jsonl with no way to tell
+# which lines belong together.
 TOOL_DISPATCH = {
-    "sql_tool": lambda args: run_sql_query(args["query"]),
-    "rag_tool": lambda args: rag_search(args["query"], top_k=args.get("top_k", 5)),
+    "sql_tool": lambda args, request_id: run_sql_query(args["query"], request_id=request_id),
+    "rag_tool": lambda args, request_id: rag_search(
+        args["query"], top_k=args.get("top_k", 5), request_id=request_id
+    ),
 }
 
 # Verify against current provider pricing pages before trusting this for
@@ -37,8 +49,16 @@ def run_agent(question: str, provider: str = "anthropic") -> AgentResult:
     client = adapter.build_client()
     messages = adapter.build_initial_messages(question)
     tool_executions: list[ToolExecution] = []
+    request_id = str(uuid.uuid4())
 
     for _ in range(MAX_ITERATIONS):
+        spent_today = tracer.cost_today_usd()
+        if spent_today >= settings.daily_budget_usd:
+            raise BudgetExceededError(
+                f"Daily budget of ${settings.daily_budget_usd:.2f} exceeded "
+                f"(${spent_today:.2f} spent today). Try again tomorrow."
+            )
+
         start = time.perf_counter()
         turn = adapter.run_turn(client, messages, TOOLS)
         latency_ms = (time.perf_counter() - start) * 1000
@@ -50,6 +70,7 @@ def run_agent(question: str, provider: str = "anthropic") -> AgentResult:
         )
         tracer.log_event(
             "llm_call",
+            request_id=request_id,
             provider=provider,
             model=adapter.MODEL,
             input_tokens=turn.input_tokens,
@@ -62,12 +83,12 @@ def run_agent(question: str, provider: str = "anthropic") -> AgentResult:
         messages.append(turn.raw_assistant_message)
 
         if not turn.tool_calls:
-            return AgentResult(answer=turn.text or "", tool_executions=tool_executions)
+            return AgentResult(answer=turn.text or "", tool_executions=tool_executions, request_id=request_id)
 
         results = []
         for tc in turn.tool_calls:
             try:
-                result = TOOL_DISPATCH[tc.name](tc.arguments)
+                result = TOOL_DISPATCH[tc.name](tc.arguments, request_id)
                 result_str = json.dumps(result)
             except Exception as exc:
                 # Tool failures are handed back to the model as the tool
@@ -85,4 +106,5 @@ def run_agent(question: str, provider: str = "anthropic") -> AgentResult:
     return AgentResult(
         answer="Agent could not resolve the question within the iteration limit.",
         tool_executions=tool_executions,
+        request_id=request_id,
     )

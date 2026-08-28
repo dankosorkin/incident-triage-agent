@@ -45,7 +45,9 @@ LLM tool calling, which source (or both) a question needs.
 - [x] RAG groundedness (manual grading tool: `eval/grade_rag_manual.py`; grading itself not started)
 - [x] Docker (Dockerfile + docker-compose, verified end-to-end)
 - [x] Locked dependency versions (`requirements-lock.txt`, used by Docker build)
-- [x] Unit tests (90 tests, 91% coverage on `app/`; mocked OpenAI/Anthropic/Chroma, no real API calls)
+- [x] Unit tests (99 tests, 91% coverage on `app/`; mocked OpenAI/Anthropic/Chroma, no real API calls)
+- [x] Hardening: daily budget cap, explicit LLM timeouts/retries, non-root
+      Docker user, request-id tracing, locked concurrent trace writes
 
 ## Tech stack
 
@@ -181,3 +183,44 @@ A few decisions that aren't obvious from the code alone:
   lock file specifically (`pip install -r requirements-lock.txt`,
   then the package itself with `--no-deps`) so the image doesn't
   silently drift to newer dependency versions on a future rebuild.
+- **Daily budget circuit breaker.** `run_agent()` checks
+  `tracer.cost_today_usd()` (sums `cost_usd`/`embedding_cost_usd` across
+  today's trace entries) against `settings.daily_budget_usd` (default $5)
+  before every LLM turn, not just once per request -- a single request
+  making several tool-calling turns couldn't otherwise blow well past the
+  limit before the check ran again. Raises `BudgetExceededError` -> API
+  maps it to `429`.
+- **Explicit LLM timeouts and retries.** Both SDKs default to a 600s read
+  timeout and 2 retries -- fine defaults, but implicit and undocumented in
+  this codebase. Now explicit in each provider's `build_client()`
+  (`REQUEST_TIMEOUT_SECONDS = 30.0`, `MAX_RETRIES = 2`): a stuck call no
+  longer ties up a threadpool worker for up to 10 minutes.
+- **Non-root Docker user.** `Dockerfile` now creates `appuser` (uid 1000)
+  and switches to it before `ENTRYPOINT`. The tricky part isn't the
+  `USER` line itself -- it's that `/app/data` has to be `chown`'d to
+  `appuser` *before* the volume mount takes it over, since Docker
+  initializes a fresh named volume from the image directory's contents
+  and ownership on first use.
+- **Request-id tracing.** `run_agent()` generates one UUID per call and
+  threads it through every `llm_call` and `tool_call` trace line for that
+  request (`sql_tool`/`rag_tool` gained an optional `request_id` param
+  just to carry it). Without this, concurrent requests interleave in
+  `traces.jsonl` with no way to tell which lines belong together. Also
+  returned in the `/chat` response so a client has a reference id to
+  quote when reporting an issue.
+- **Locked concurrent trace writes.** `tracer.log_event()` now takes an
+  `flock` around the write -- FastAPI's threadpool means concurrent
+  requests can call it at the same time, and a plain `open("a").write()`
+  isn't guaranteed atomic once a line is long enough to cross a single
+  `write()` syscall. Caveat, stated plainly: a 50-thread concurrent-write
+  test couldn't actually reproduce corruption *without* the lock either,
+  on this filesystem at this payload size -- the fix is still correct per
+  POSIX (and necessary for larger payloads or networked filesystems), but
+  the test is a concurrency smoke test, not a proven regression guard for
+  this specific race.
+- **`/chat` has no authentication or rate limiting.** Anyone who can reach
+  the port can spend the configured OpenAI/Anthropic budget. Not fixed --
+  the daily circuit breaker above bounds the damage but doesn't replace
+  real auth, and that's a bigger, separate feature (API keys or JWT +
+  per-client rate limits), not a one-line fix. Biggest remaining gap in
+  the project as it stands.

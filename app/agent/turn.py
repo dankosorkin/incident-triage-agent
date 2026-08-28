@@ -30,3 +30,4 @@ class ToolExecution:
 class AgentResult:
     answer: str
     tool_executions: list[ToolExecution]
+    request_id: str

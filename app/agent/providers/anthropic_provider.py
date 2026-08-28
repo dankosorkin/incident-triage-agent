@@ -18,10 +18,17 @@ from app.config import settings
 
 MODEL = "claude-haiku-4-5-20251001"
 MAX_TOKENS = 1024
+# Same reasoning as openai_provider.py: SDK default read timeout is 600s,
+# too long for a threadpool-blocking request; 2 retries is the SDK
+# default, made explicit rather than left implicit.
+REQUEST_TIMEOUT_SECONDS = 30.0
+MAX_RETRIES = 2
 
 
 def build_client() -> Anthropic:
-    return Anthropic(api_key=settings.anthropic_api_key)
+    return Anthropic(
+        api_key=settings.anthropic_api_key, timeout=REQUEST_TIMEOUT_SECONDS, max_retries=MAX_RETRIES
+    )
 
 
 def build_initial_messages(question: str) -> list[dict]:

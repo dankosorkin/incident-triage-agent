@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
+    daily_budget_usd: float = 5.0
 
 
 settings = Settings()

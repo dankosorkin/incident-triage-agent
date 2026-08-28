@@ -18,7 +18,7 @@ class SQLToolError(Exception):
     pass
 
 
-def run_sql_query(query: str) -> list[dict]:
+def run_sql_query(query: str, request_id: str | None = None) -> list[dict]:
     start = time.perf_counter()
     error = None
     rows: list[dict] = []
@@ -49,6 +49,7 @@ def run_sql_query(query: str) -> list[dict]:
         log_event(
             "tool_call",
             tool="sql",
+            request_id=request_id,
             query=query,
             row_count=len(rows),
             latency_ms=round(latency_ms, 2),

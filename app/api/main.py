@@ -8,7 +8,7 @@ the same blocking calls inside would serialize every request.
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from app.agent.loop import run_agent
+from app.agent.loop import BudgetExceededError, run_agent
 
 app = FastAPI(title="incident-triage-agent")
 
@@ -20,6 +20,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+    request_id: str
 
 
 @app.get("/health")
@@ -33,4 +34,6 @@ def chat(request: ChatRequest) -> ChatResponse:
         result = run_agent(request.question, provider=request.provider)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return ChatResponse(answer=result.answer)
+    except BudgetExceededError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    return ChatResponse(answer=result.answer, request_id=result.request_id)

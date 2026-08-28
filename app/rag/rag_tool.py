@@ -23,7 +23,7 @@ class RAGToolError(Exception):
     pass
 
 
-def search(query: str, top_k: int = 5) -> list[dict]:
+def search(query: str, top_k: int = 5, request_id: str | None = None) -> list[dict]:
     start = time.perf_counter()
     error = None
     results: list[dict] = []
@@ -54,6 +54,7 @@ def search(query: str, top_k: int = 5) -> list[dict]:
         log_event(
             "tool_call",
             tool="rag",
+            request_id=request_id,
             query=query,
             top_k=top_k,
             result_count=len(results),
